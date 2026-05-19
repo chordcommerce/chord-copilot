@@ -1,0 +1,16 @@
+{
+  "name": "chord",
+  "owner": { "name": "Chord Commerce" },
+  "description": "Chord Commerce's Claude Code plugin marketplace.",
+  "plugins": [
+    {
+      "name": "chord",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/chordcommerce/chord-copilot.git",
+        "path": "plugin"
+      },
+      "description": "Registers the chord-copilot MCP server and installs the data-question workflow skill."
+    }
+  ]
+}
