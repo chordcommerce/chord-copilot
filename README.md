@@ -1,116 +1,222 @@
-# chord-copilot
+# Chord Copilot
 
-The Claude Code plugin + standalone skill for answering data questions
-against the Chord warehouse using the Chord Copilot MCP server.
+Chord Copilot is a hosted MCP server that lets Claude answer data
+questions against **your** Chord warehouse — schema lookup, saved views,
+canonical SQL pairs, and `execute_sql`, all behind OAuth.
 
-This repo ships **two install paths from the same source of truth** — pick
-whichever fits your client:
+This repo contains the **install artifacts** for connecting Claude (Code
+or Desktop) to your Chord Copilot instance. The server itself runs on
+Chord-managed infrastructure.
 
-- **Claude Code plugin** — one command. Registers the MCP server *and*
-  installs the skill. Recommended for Claude Code users.
-- **Standalone skill installer** — a `curl | bash` script that drops
-  `SKILL.md` into `~/.claude/skills/chord-copilot/`. Useful for Claude
-  Desktop or any MCP client that reads `SKILL.md` but doesn't support
-  Claude Code plugins. Requires a separate `claude mcp add` step.
+## Before you start
 
-The MCP **server** itself (the wren-ai-service implementation) lives in a
-separate Chord repo. This repo only contains the user-facing onboarding
-artifacts.
-
-## Install (Claude Code plugin)
-
-Two commands. The first adds this repo as a plugin marketplace; the
-second installs the chord-copilot plugin from it.
+You need your **instance URL**. Every Chord customer has their own
+hosted endpoint of the form:
 
 ```
-/plugin marketplace add chordcommerce/chord-copilot
-/plugin install chord@chord
+https://mcp.<instance>.copilot.chord.co/mcp/
 ```
 
-That installs:
+`<instance>` is the slug Chord assigned to your tenant (ask your Chord
+contact if you don't have it). The examples below use
+`<instance>` as a placeholder — substitute your own everywhere it
+appears.
 
-1. The `chord-copilot` MCP server (via the bundled `.mcp.json`) — no
-   separate `claude mcp add` step needed.
-2. The `copilot` workflow skill (from `skills/copilot/SKILL.md`), which
-   appears in Claude Code as `chord:copilot`.
+On first connection, you'll be redirected to a browser to complete OAuth
+sign-in with your Chord account. The token is cached for subsequent
+sessions.
 
-Restart Claude Code and you're done.
+---
 
-The plugin's `.mcp.json` points at `http://localhost:5555/mcp/` by
-default. If your wren-ai-service runs elsewhere, edit the installed
-copy under `~/.claude/plugins/` or override via `claude mcp` commands.
+## Claude Code
 
-## Install (standalone skill)
+> **Note:** the `/plugin install chord@chord` path in this repo is
+> intended for engineers developing against a **local** MCP server
+> (`http://localhost:5556`). Customers should use one of the two paths
+> below, which let you point at your own hosted instance.
 
-Two steps, in order:
+You need to do two things: **register the MCP server** so Claude Code
+can talk to your Copilot instance, and **install the skill** so Claude
+knows the retrieval-grounded workflow for using it.
 
-### 1. Register the MCP server
+### Option A — One-liner (recommended)
 
-```bash
-# Local wren-ai-service:
-claude mcp add chord-copilot --transport http http://localhost:5555/mcp/ --scope user
-
-# Or any deployed instance: swap in your wren-ai-service host.
-```
-
-### 2. Install the skill
+Installs the skill from this repo into `~/.claude/skills/chord-copilot/`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chordcommerce/chord-copilot/main/install.sh | bash
 ```
 
-Restart your client.
-
-## `install.sh` options
-
-```
-./install.sh [--scope user|project] [--project-dir <path>] [--ref <ref>] [--force]
-```
-
-- `--scope user` (default) → `~/.claude/skills/chord-copilot/`.
-- `--scope project` → `<project-dir>/.claude/skills/chord-copilot/`.
-- `--project-dir <path>` — defaults to `pwd`.
-- `--ref <branch|tag|sha>` — pin which version of SKILL.md to fetch
-  (also `CHORD_SKILL_REF` env var). Defaults to `main`.
-- `--force` — overwrite an existing install without prompting.
-
-## Verifying
+Then register the MCP server, pointing at your instance:
 
 ```bash
-claude mcp list             # should show `chord-copilot` connected
-ls ~/.claude/skills/         # standalone install path
-ls ~/.claude/plugins/        # plugin install path
+claude mcp add chord-copilot \
+  --transport http \
+  --scope user \
+  https://mcp.<instance>.copilot.chord.co/mcp/
 ```
 
-Then ask Claude *"How many orders did we have last month?"* — the skill
-should auto-trigger and walk through the retrieval-grounded SQL workflow:
+Restart Claude Code. On first use, a browser tab opens for OAuth
+sign-in.
+
+### Option B — Manual
+
+If you'd rather not run a remote script, the steps are:
+
+1. Copy [`plugin/skills/copilot/SKILL.md`](plugin/skills/copilot/SKILL.md)
+   into `~/.claude/skills/chord-copilot/SKILL.md` (create the directory
+   if needed).
+2. Register the MCP server with the `claude mcp add` command shown above.
+
+### Scope: user vs. project
+
+The examples above use `--scope user`, which makes the server available
+in every Claude Code session. To scope it to a single repo instead, run
+the `claude mcp add` command from inside that repo with
+`--scope project` — it writes to `.claude/settings.json` in the project
+root, which you can commit so teammates pick it up automatically.
+
+The `install.sh` script supports the same split:
+`--scope project --project-dir <path>` drops the skill under
+`<path>/.claude/skills/chord-copilot/`.
+
+### Verifying
+
+```bash
+claude mcp list   # chord-copilot should show as connected
+```
+
+Then ask Claude *"How many orders did we have last month?"* — the
+`chord:copilot` skill should auto-trigger and walk through
 `search_schema` → `search_saved_views` / `search_sql_pairs` →
 `search_instructions` → draft SQL → `execute_sql`.
 
-## Repo layout
+---
+
+## Claude Desktop
+
+Claude Desktop has two ways to add a remote MCP server. The connector
+UI is faster but only available on paid plans; the config-file path
+works on any plan but needs a stdio bridge.
+
+### Option A — Custom connector (Pro / Team / Enterprise)
+
+Available on paid Claude plans only. The UI talks the
+`streamable-http` protocol natively, so there's no shim or config file
+to manage.
+
+1. Open **Settings → Connectors → Add custom connector**.
+2. Fill in:
+   - **Name:** `Chord Copilot`
+   - **Remote MCP server URL:** `https://mcp.<instance>.copilot.chord.co/mcp/`
+3. Save. Claude Desktop opens a browser tab for OAuth sign-in on first use.
+
+### Option B — Edit config file (any plan)
+
+Claude Desktop's config file only speaks stdio, so the remote endpoint
+has to be bridged through the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+npm package. (Adding a bare `url` field to the JSON config triggers a
+known bug where Claude Desktop silently drops the entire `mcpServers`
+block on next launch — don't.)
+
+**Automated (macOS/Linux, requires `jq`):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chordcommerce/chord-copilot/main/install.sh | \
+  bash -s -- --client claude-desktop --url https://mcp.<instance>.copilot.chord.co/mcp/
+```
+
+This merges a `chord-copilot` entry into `claude_desktop_config.json`
+without touching other MCP servers you may have configured. Pass
+`--force` to overwrite a differing existing entry.
+
+**Manual:** open **Settings → Developer → Edit Config** (or directly:
+`~/Library/Application Support/Claude/claude_desktop_config.json` on
+macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows) and
+add:
+
+```json
+{
+  "mcpServers": {
+    "chord-copilot": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.<instance>.copilot.chord.co/mcp/"
+      ]
+    }
+  }
+}
+```
+
+If you already have other servers under `mcpServers`, merge the
+`chord-copilot` entry into the existing block — don't replace it.
+
+On first launch, `mcp-remote` opens a browser tab for OAuth sign-in and
+caches the token under `~/.mcp-auth/` for future sessions.
+
+### Restart
+
+Full quit and reopen — closing the window is not enough. Use `Cmd+Q`
+on macOS, or exit from the system tray on Windows.
+
+If the server doesn't appear, check the MCP log:
+
+- **macOS:** `~/Library/Logs/Claude/mcp.log`
+- **Windows:** `%APPDATA%\Claude\logs\mcp.log`
+
+### Skill in Claude Desktop
+
+Claude Desktop doesn't auto-load `~/.claude/skills/` the way Claude
+Code does, but it has its own skill upload UI:
+
+1. Download [`plugin/skills/copilot/SKILL.md`](plugin/skills/copilot/SKILL.md)
+   from this repo.
+2. In Claude Desktop, open **Customize → Skill**, click the **+** icon,
+   and choose **Upload**.
+3. Select the `SKILL.md` you just downloaded.
+
+The skill will then auto-trigger on data questions, the same way it
+does in Claude Code.
+
+---
+
+## Other MCP clients
+
+Any client that supports remote `streamable-http` MCP servers can
+connect directly to `https://mcp.<instance>.copilot.chord.co/mcp/`.
+Clients that only speak stdio (like Claude Desktop's config file) need
+the `mcp-remote` shim shown above.
+
+## `install.sh` reference
 
 ```
-chord-copilot/
-├── .claude-plugin/
-│   └── marketplace.json         # marketplace manifest (referenced by `/plugin marketplace add`)
-├── plugin/                       # the chord plugin (referenced from marketplace.json as a git-subdir source)
-│   ├── .claude-plugin/
-│   │   └── plugin.json           # plugin manifest
-│   ├── .mcp.json                 # MCP server registration (bundled with plugin install)
-│   └── skills/
-│       └── copilot/
-│           └── SKILL.md          # canonical workflow guidance (plugin namespace: chord:copilot)
-├── install.sh                    # standalone installer (fallback for non-plugin clients)
-├── README.md
-└── LICENSE
+./install.sh [--client claude-code|claude-desktop] \
+             [--scope user|project] [--project-dir <path>] \
+             [--url <url>] [--force]
 ```
 
-`SKILL.md` is the canonical source of truth. Both the plugin install path
-and the standalone `install.sh` consume it from `plugin/skills/copilot/`.
+- `--client claude-code` (default) — drops `SKILL.md` under `~/.claude/skills/`.
+- `--client claude-desktop` — merges MCP entry into `claude_desktop_config.json`. Requires `jq`. macOS/Linux only.
+- `--scope user` (default) → `~/.claude/skills/chord-copilot/`.
+- `--scope project` → `<project-dir>/.claude/skills/chord-copilot/`.
+- `--project-dir <path>` — defaults to `pwd`.
+- `--url <url>` — your instance URL (claude-desktop only; defaults to Chord staging).
+- `--force` — overwrite an existing install/entry without prompting.
 
-The plugin's `.mcp.json` lives under `plugin/`, not at the repo root.
-This stops Claude Code from auto-detecting it as project-scope MCP
-config and stomping on it while you work in the repo.
+## Troubleshooting
+
+- **`claude mcp list` shows the server but tools don't appear** — the
+  OAuth token may have expired. In Claude Code, run
+  `claude mcp remove chord-copilot && claude mcp add ...` again. In
+  Claude Desktop, delete `~/.mcp-auth/` and restart.
+- **Wrong instance URL** — confirm with your Chord contact that
+  `mcp.<instance>.copilot.chord.co` is reachable from a browser; you
+  should land on a Chord-branded sign-in page.
+- **Skill doesn't auto-trigger in Claude Code** — confirm `SKILL.md`
+  lives at `~/.claude/skills/chord-copilot/SKILL.md` and restart the
+  Claude Code session.
 
 ## License
 

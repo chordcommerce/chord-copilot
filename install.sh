@@ -1,51 +1,60 @@
 #!/usr/bin/env bash
-# Install the chord-copilot Claude Code skill.
+# Install the chord-copilot Claude Code skill, or register the
+# chord-copilot MCP server in Claude Desktop's config.
 #
 # Usage:
-#   ./install.sh [--scope user|project] [--project-dir <path>] [--ref <ref>] [--force]
+#   ./install.sh [--client claude-code|claude-desktop] \
+#                [--scope user|project] [--project-dir <path>] \
+#                [--url <url>] [--force]
 #
-# Default scope is `user` (~/.claude/skills/chord-copilot/), which makes the
-# skill available in every Claude Code session for the current user.
-# `--scope project` installs into <project-dir>/.claude/skills/chord-copilot/
-# (defaults to the current working directory), which makes the skill travel
-# with the repo for teammates who clone it.
+# --client claude-code (default): drops SKILL.md at
+# ~/.claude/skills/chord-copilot/ (scope=user) or
+# <project>/.claude/skills/chord-copilot/ (scope=project). Does NOT
+# register the MCP server — run `claude mcp add` separately, or use the
+# /plugin install path for one-step setup.
 #
-# SKILL.md resolution: if a local copy sits at plugin/skills/copilot/SKILL.md
-# relative to this script (the local-clone case), it is used directly.
-# Otherwise — the typical `curl ... | bash` flow — SKILL.md is downloaded
-# from
-# https://raw.githubusercontent.com/chordcommerce/chord-copilot/<ref>/plugin/skills/copilot/SKILL.md
-# `--ref` (or the CHORD_SKILL_REF env var) pins which branch/tag/sha to
-# fetch from; defaults to `main`.
+# --client claude-desktop: merges the chord-copilot MCP server entry
+# into ~/Library/Application Support/Claude/claude_desktop_config.json
+# (macOS) or ~/.config/Claude/claude_desktop_config.json (Linux) using
+# the mcp-remote stdio shim. Requires jq. macOS/Linux only.
 #
-# Public one-liner:
+# --url overrides the MCP server URL (claude-desktop only).
+# --force overwrites a differing existing install.
+#
+# Public one-liners:
+#   # Claude Code skill:
 #   curl -fsSL https://raw.githubusercontent.com/chordcommerce/chord-copilot/main/install.sh | bash
-#   # project scope: append `-s -- --scope project --project-dir "$(pwd)"`
-#
-# Claude Code users can install both the MCP server registration AND the
-# skill in one step via the Claude Code plugin format in this same repo:
-#   /plugin install chordcommerce/chord-copilot
-# This script is the fallback for non-Claude-Code MCP clients (Claude
-# Desktop, etc.) that read SKILL.md but don't support plugins.
+#   # Claude Desktop MCP registration:
+#   curl -fsSL https://raw.githubusercontent.com/chordcommerce/chord-copilot/main/install.sh | bash -s -- --client claude-desktop
 
 set -euo pipefail
 
 SKILL_NAME="chord-copilot"
 REPO_PATH="chordcommerce/chord-copilot"
 SKILL_REPO_PATH="plugin/skills/copilot/SKILL.md"
+DEFAULT_MCP_URL="https://mcp.staging.chorddemo.copilot.chord.co/mcp/"
 
+CLIENT="claude-code"
 SCOPE="user"
 PROJECT_DIR="$(pwd)"
-REF="${CHORD_SKILL_REF:-main}"
+MCP_URL=""
 FORCE=0
 
 usage() {
-  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --client)
+      CLIENT="${2:-}"
+      shift 2
+      ;;
+    --client=*)
+      CLIENT="${1#--client=}"
+      shift
+      ;;
     --scope)
       SCOPE="${2:-}"
       shift 2
@@ -62,12 +71,12 @@ while [[ $# -gt 0 ]]; do
       PROJECT_DIR="${1#--project-dir=}"
       shift
       ;;
-    --ref)
-      REF="${2:-}"
+    --url)
+      MCP_URL="${2:-}"
       shift 2
       ;;
-    --ref=*)
-      REF="${1#--ref=}"
+    --url=*)
+      MCP_URL="${1#--url=}"
       shift
       ;;
     --force|-f)
@@ -83,6 +92,77 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+case "$CLIENT" in
+  claude-code|claude-desktop) ;;
+  *)
+    echo "error: --client must be 'claude-code' or 'claude-desktop' (got: $CLIENT)" >&2
+    exit 1
+    ;;
+esac
+
+# ---- Claude Desktop branch: merge MCP entry into claude_desktop_config.json
+
+if [[ "$CLIENT" == "claude-desktop" ]]; then
+  case "$(uname -s)" in
+    Darwin) CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json" ;;
+    Linux)  CONFIG="$HOME/.config/Claude/claude_desktop_config.json" ;;
+    *)
+      echo "error: --client claude-desktop supports macOS and Linux only (got: $(uname -s))" >&2
+      exit 1
+      ;;
+  esac
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "error: jq is required for --client claude-desktop." >&2
+    echo "       install with: brew install jq  (macOS)  or  apt install jq  (Linux)" >&2
+    exit 1
+  fi
+
+  RESOLVED_URL="${MCP_URL:-$DEFAULT_MCP_URL}"
+  DESIRED_ENTRY="$(jq -n --arg url "$RESOLVED_URL" \
+    '{command:"npx", args:["-y","mcp-remote",$url]}')"
+
+  mkdir -p "$(dirname "$CONFIG")"
+  if [[ ! -f "$CONFIG" ]]; then
+    printf '{}\n' > "$CONFIG"
+  fi
+
+  if ! jq empty "$CONFIG" >/dev/null 2>&1; then
+    echo "error: $CONFIG is not valid JSON. Refusing to overwrite." >&2
+    echo "       fix or remove the file and re-run." >&2
+    exit 1
+  fi
+
+  EXISTING_ENTRY="$(jq --arg name "$SKILL_NAME" '.mcpServers[$name] // empty' "$CONFIG")"
+  if [[ -n "$EXISTING_ENTRY" ]]; then
+    CANON_EXISTING="$(echo "$EXISTING_ENTRY" | jq -S .)"
+    CANON_DESIRED="$(echo "$DESIRED_ENTRY" | jq -S .)"
+    if [[ "$CANON_EXISTING" == "$CANON_DESIRED" ]]; then
+      echo "already registered (identical content): $CONFIG"
+      exit 0
+    fi
+    if [[ $FORCE -ne 1 ]]; then
+      echo "error: $CONFIG already has a '$SKILL_NAME' entry that differs." >&2
+      echo "       pass --force to overwrite." >&2
+      exit 1
+    fi
+  fi
+
+  TMP_CONFIG="$(mktemp -t chord-desktop.XXXXXX)"
+  trap 'rm -f "$TMP_CONFIG"' EXIT
+  jq --arg name "$SKILL_NAME" --argjson entry "$DESIRED_ENTRY" \
+    '.mcpServers[$name] = $entry' "$CONFIG" > "$TMP_CONFIG"
+  mv "$TMP_CONFIG" "$CONFIG"
+
+  echo "registered $SKILL_NAME in: $CONFIG"
+  echo "  url: $RESOLVED_URL"
+  echo "  next: full quit Claude Desktop (Cmd+Q on macOS) and reopen."
+  echo "        first connection opens a browser for OAuth sign-in."
+  exit 0
+fi
+
+# ---- Claude Code branch: drop SKILL.md under ~/.claude/skills/
 
 case "$SCOPE" in
   user)    TARGET_ROOT="$HOME/.claude/skills" ;;
@@ -113,12 +193,12 @@ else
     echo "error: curl is required to fetch SKILL.md when no local copy is present" >&2
     exit 1
   fi
-  URL="https://raw.githubusercontent.com/$REPO_PATH/$REF/$SKILL_REPO_PATH"
+  URL="https://raw.githubusercontent.com/$REPO_PATH/main/$SKILL_REPO_PATH"
   TMP_SOURCE="$(mktemp -t chord-skill.XXXXXX)"
   trap 'rm -f "$TMP_SOURCE"' EXIT
   if ! curl -fsSL "$URL" -o "$TMP_SOURCE"; then
     echo "error: failed to download SKILL.md from $URL" >&2
-    echo "       check the ref ('$REF') and your network connection." >&2
+    echo "       check your network connection." >&2
     exit 1
   fi
   SOURCE="$TMP_SOURCE"
