@@ -82,17 +82,3 @@ Run independent retrieval steps in parallel.
 - If the engine returns an error, surface the error text verbatim before
   attempting a fix — the user often recognizes it.
 
-## Failure modes
-
-- **MCP tools not available**: the `mcp__chord__*` tools are missing from
-  the tool list. The chord-copilot MCP server isn't registered with
-  Claude Code. Tell the user to run:
-  ```
-  claude mcp add chord-copilot --transport http http://localhost:5556/mcp/ --scope user
-  ```
-  (replacing the URL if their wren-ai-service runs elsewhere). Fall back
-  to whatever workflow they normally use until they do.
-- **Engine unreachable**: `execute_sql` / `preview_table` return a
-  connection error (typically localhost:3000 unreachable). The retrieval
-  tools may still work — complete steps 1–4 and stop at "drafted SQL,
-  ready to run once the engine is up."
