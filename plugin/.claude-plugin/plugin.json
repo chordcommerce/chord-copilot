@@ -1,7 +1,7 @@
 {
   "name": "chord",
   "version": "0.1.0",
-  "description": "MCP server registration and workflow skill for answering data questions against the Chord warehouse.",
+  "description": "MCP server registration and skill for answering data questions against the Chord warehouse. Supports Analyst mode (Claude retrieves context via get_sql_context and writes SQL) and Copilot mode (full Hub pipeline via ask).",
   "author": { "name": "Chord Commerce" },
   "homepage": "https://github.com/chordcommerce/chord-copilot"
 }

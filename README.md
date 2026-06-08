@@ -87,9 +87,13 @@ claude mcp list   # chord-copilot should show as connected
 ```
 
 Then ask Claude *"How many orders did we have last month?"* — the
-`chord:copilot` skill should auto-trigger and walk through
-`search_schema` → `search_saved_views` / `search_sql_pairs` →
-`search_instructions` → draft SQL → `execute_sql`.
+`chord:copilot` skill should auto-trigger and walk through the **Analyst
+workflow**: `get_sql_context` (parallel schema DDL + SQL examples +
+instructions + memory) → `search_saved_views` → draft SQL → `execute_sql`.
+
+For a packaged answer with a natural-language summary, use **Copilot mode**:
+ask Claude to "use the Hub" or call `ask` directly — the Hub handles SQL
+generation, execution, and summarization in one call.
 
 ---
 
