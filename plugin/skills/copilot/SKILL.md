@@ -1,6 +1,6 @@
 ---
 name: chord-copilot
-description: Answer data questions against the Chord warehouse using the chord MCP retrieval and execution tools. Use when the user asks about warehouse data, schema, metrics, revenue, customers, orders, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any saved/canonical query — i.e. anything that would be answered by SQL against the Chord data model. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. Walks the agent through the default retrieval-grounded SQL workflow: search_schema → search_saved_views / search_sql_pairs → search_instructions → draft SQL → execute_sql. Requires the chord-copilot MCP server to be connected; if the mcp__chord__* tools are not available, fall back to the user's normal workflow and tell them to connect the server.
+description: Answer data questions against the Chord warehouse using the chord MCP retrieval and execution tools. Use when the user asks about warehouse data, schema, metrics, revenue, customers, orders, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any saved/canonical query — i.e. anything that would be answered by SQL against the Chord data model. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. For a text-to-SQL question, calls `ask` (Chord's end-to-end text-to-SQL pipeline) then runs the returned SQL with execute_sql, falling back to the retrieval-grounded authoring workflow (search_schema → search_saved_views / search_sql_pairs → search_instructions → draft SQL → execute_sql) when ask fails or the SQL needs inspection. Requires the chord-copilot MCP server to be connected; if the mcp__chord__* tools are not available, fall back to the user's normal workflow and tell them to connect the server.
 ---
 
 # Chord Copilot — data-question workflow
@@ -13,8 +13,20 @@ table names when these tools are available.
 
 ## When to use which tool
 
-- **`search_schema`** — first stop for any data question. Discover which
-  tables exist and what they contain before writing SQL.
+- **`ask`** — first stop for a text-to-SQL question. Runs Chord's full
+  text-to-SQL pipeline (schema/instruction retrieval, SQL generation,
+  validation, self-healing) and returns grounded SQL. Returns `{status,
+  type, sql, rephrased_question, sql_generation_reasoning,
+  retrieved_tables, assistant_text, error, trace_id}`. When `type` is
+  `TEXT_TO_SQL`, use the returned `sql` rather than authoring your own,
+  then run it with `execute_sql`. When `type` is `GENERAL`, the answer is
+  already in `assistant_text` and there's no SQL to run. Pass `histories`
+  (prior `{question, sql}` turns, oldest first) for follow-ups and
+  `custom_instruction` for one-off guidance. The call blocks until the
+  pipeline finishes (up to a few minutes).
+- **`search_schema`** — for the fallback authoring path (or to inspect
+  what `ask` used). Discover which tables exist and what they contain
+  before writing SQL.
 - **`search_sql_pairs`** — find past question/SQL pairs that resemble the
   user's question. Useful as few-shot grounding before drafting new SQL.
 - **`search_saved_views`** — check whether a user-blessed canonical query
@@ -32,7 +44,18 @@ table names when these tools are available.
 
 ## Default workflow
 
-For a data question:
+For a text-to-SQL question:
+
+1. `ask` — run Chord's end-to-end text-to-SQL pipeline.
+   - `type` is `TEXT_TO_SQL`: use the returned `sql`.
+   - `type` is `GENERAL`: present `assistant_text` — you're done, no SQL
+     to run.
+2. `execute_sql` — run the `sql` from step 1 to return rows.
+
+### Fallback: author the SQL yourself
+
+If `ask` fails (`status` is `failed`), or you need to inspect or adjust the
+SQL it produced, drop to the retrieval-grounded authoring workflow:
 
 1. `search_schema` — discover relevant tables.
 2. `search_saved_views` and `search_sql_pairs` — in parallel, look for a
@@ -46,10 +69,14 @@ Run independent retrieval steps in parallel.
 
 ## How to present the answer
 
-- Cite which instructions you applied — and which you intentionally
-  skipped, with reasoning. (Example: "Used plain `NET_REVENUE` because
-  the user asked for 'revenue', not 'net revenue' — instruction #37
-  reserves the COGS+shipping formula for explicit 'net revenue' asks.")
+- When `ask` produced the SQL, summarize its `sql_generation_reasoning`
+  and name the `retrieved_tables` it grounded on, so the user can see how
+  the query was derived.
+- When you authored the SQL yourself (fallback path), cite which
+  instructions you applied — and which you intentionally skipped, with
+  reasoning. (Example: "Used plain `NET_REVENUE` because the user asked
+  for 'revenue', not 'net revenue' — instruction #37 reserves the
+  COGS+shipping formula for explicit 'net revenue' asks.")
 - If a saved view answered the question, name the `view_id` so the user
   can find it in Copilot.
 - If the engine returns an error, surface the error text verbatim before
@@ -61,7 +88,7 @@ Run independent retrieval steps in parallel.
   the tool list. The chord-copilot MCP server isn't registered with
   Claude Code. Tell the user to run:
   ```
-  claude mcp add chord-copilot --transport http http://localhost:5555/mcp/ --scope user
+  claude mcp add chord-copilot --transport http http://localhost:5556/mcp/ --scope user
   ```
   (replacing the URL if their wren-ai-service runs elsewhere). Fall back
   to whatever workflow they normally use until they do.
