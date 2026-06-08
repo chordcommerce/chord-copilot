@@ -10,7 +10,7 @@
         "url": "https://github.com/chordcommerce/chord-copilot.git",
         "path": "plugin"
       },
-      "description": "Registers the chord-copilot MCP server and installs the data-question workflow skill."
+      "description": "Registers the chord-copilot MCP server and installs the data-question skill. Analyst mode uses get_sql_context to ground Claude's SQL in schema DDL, instructions, and examples. Copilot mode delegates to the Hub pipeline via ask for a packaged SQL + summary answer."
     }
   ]
 }

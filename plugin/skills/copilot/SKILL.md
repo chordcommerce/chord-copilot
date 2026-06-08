@@ -1,71 +1,60 @@
 ---
 name: chord-copilot
-description: Answer data questions against the Chord warehouse using the chord MCP retrieval and execution tools. Use when the user asks about warehouse data, schema, metrics, revenue, customers, orders, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any saved/canonical query — i.e. anything that would be answered by SQL against the Chord data model. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. Walks the agent through the default retrieval-grounded SQL workflow: search_schema → search_saved_views / search_sql_pairs → search_instructions → draft SQL → execute_sql. Requires the chord-copilot MCP server to be connected; if the mcp__chord__* tools are not available, fall back to the user's normal workflow and tell them to connect the server.
+description: Answer data questions against the Chord warehouse by delegating to the Chord GraphQL pipeline end-to-end. Use when the chord MCP server is connected (mcp__chord__* tools are available) and the user asks about warehouse data — revenue, orders, customers, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any metric in the Chord data model. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. The pipeline handles intent classification, SQL generation, warehouse execution, and narrative summary — Claude surfaces the result.
 ---
 
-# Chord Copilot — data-question workflow
+# Chord Copilot — GraphQL pipeline workflow
 
-You have access to a set of `mcp__chord__*` tools exposed by the chord-copilot
-MCP server. Reach for them automatically — without being asked — whenever the
-user's request involves the project's warehouse data, schema, saved queries,
-or product documentation. Do not fall back to hand-written SQL or guess at
-table names when these tools are available.
+You have access to `mcp__chord__*` tools exposed by the chord MCP server.
+Use them automatically whenever the user's request involves warehouse data.
 
-## When to use which tool
+Use the Copilot-tier tools for this workflow: `ask` and `preview_table`.
+Do not call `get_sql_context`, `execute_sql`, or write SQL directly — the
+pipeline handles all of that.
 
-- **`search_schema`** — first stop for any data question. Discover which
-  tables exist and what they contain before writing SQL.
-- **`search_sql_pairs`** — find past question/SQL pairs that resemble the
-  user's question. Useful as few-shot grounding before drafting new SQL.
-- **`search_saved_views`** — check whether a user-blessed canonical query
-  already answers the question. Prefer an existing view over inventing SQL.
-- **`search_instructions`** — pull any always-apply SQL guidance the user
-  has stored (filters, joins, casing rules, revenue/COGS conventions,
-  test-order exclusion). Run this before finalizing SQL.
-- **`search_documentation`** — for "how do I…" questions about the Chord
-  Copilot product itself (global, not project-scoped).
-- **`preview_table`** — peek at a handful of rows from a known table.
-  Capped at 100 rows; use for shape/sanity checks, not analysis.
-- **`execute_sql`** — run a read-only query (SELECT/UNION/INTERSECT/EXCEPT
-  only; capped at 10000 rows). Pass `validate_only=True` to parse-check
-  without executing.
+The `ask` tool calls wren-ui's GraphQL API directly, running the same pipeline
+that powers the Chord Hub UI and Slack bot. Results are consistent across all
+surfaces.
 
-## Default workflow
+## Tools
 
-For a data question:
+- **`ask`** — the primary tool. One call handles the full pipeline: SQL
+  generation → warehouse execution → natural-language summary. Returns one of:
+  - `{sql, summary, threadId}` — for data questions.
+  - `{type: "NON_SQL_QUERY", explanation, threadId: null}` — for general
+    questions the pipeline can't answer with SQL.
+  Pass `thread_id` (integer) to continue an existing conversation thread.
 
-1. `search_schema` — discover relevant tables.
-2. `search_saved_views` and `search_sql_pairs` — in parallel, look for a
-   canonical query or close prior example.
-3. `search_instructions` — pull always-apply SQL guidance.
-4. Draft SQL grounded in the above.
-5. `execute_sql` (optionally with `validate_only=True` first for non-trivial
-   queries) to return rows.
+- **`preview_table`** — peek at up to 100 rows from a known table. Use for
+  quick shape checks without asking a full question.
 
-Run independent retrieval steps in parallel.
+## Workflow
 
-## How to present the answer
+1. **`ask(question, thread_id?)`** — pass the user's question as-is.
+2. If the response contains `sql` and `summary`:
+   - Present the `summary` as the answer.
+   - Offer to show the underlying SQL if the user wants to verify it.
+   - Pass the returned `threadId` as `thread_id` in any follow-up `ask` call.
+3. If the response is `NON_SQL_QUERY`: present the `explanation` directly.
 
-- Cite which instructions you applied — and which you intentionally
-  skipped, with reasoning. (Example: "Used plain `NET_REVENUE` because
-  the user asked for 'revenue', not 'net revenue' — instruction #37
-  reserves the COGS+shipping formula for explicit 'net revenue' asks.")
-- If a saved view answered the question, name the `view_id` so the user
-  can find it in Copilot.
-- If the engine returns an error, surface the error text verbatim before
-  attempting a fix — the user often recognizes it.
+## Follow-up conversations
+
+Thread context is maintained server-side. Always pass the integer `threadId`
+back as `thread_id` for follow-ups:
+
+```
+first call    → ask("How many orders last month?")
+               ← {sql, summary, threadId: 42}
+follow-up     → ask("And last quarter?", thread_id=42)
+```
 
 ## Failure modes
 
-- **MCP tools not available**: the `mcp__chord__*` tools are missing from
-  the tool list. The chord-copilot MCP server isn't registered with
-  Claude Code. Tell the user to run:
+- **MCP tools not available** — the `mcp__chord__*` tools are missing.
+  The chord MCP server isn't registered. Tell the user to run:
   ```
-  claude mcp add chord-copilot --transport http http://localhost:5555/mcp/ --scope user
+  claude mcp add chord --transport http https://mcp.<instance>.chord.co/mcp/ --scope user
   ```
-  (replacing the URL if their wren-ai-service runs elsewhere). Fall back
-  to whatever workflow they normally use until they do.
-- **Engine unreachable**: `execute_sql` / `preview_table` return a
-  connection error (typically localhost:3000 unreachable). The retrieval
-  tools may still work — complete steps 1–4 and stop at "drafted SQL,
-  ready to run once the engine is up."
+
+- **`ask` returns error about wren-ui not configured** — the MCP server is
+  running without `WREN_UI_URL`. Tell the user to check their deployment config.
