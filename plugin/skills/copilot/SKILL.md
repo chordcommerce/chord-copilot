@@ -53,7 +53,9 @@ follow-up     → ask("And last quarter?", thread_id=42)
 - **MCP tools not available** — the `mcp__chord__*` tools are missing.
   The chord MCP server isn't registered. Tell the user to run:
   ```
-  claude mcp add chord --transport http https://mcp.<instance>.chord.co/mcp/ --scope user
+  # local dev (wren-ai-service):
+  claude mcp add chord --transport http http://localhost:5555/mcp/ --scope user
+  # deployed — use your wren-ai-service URL:
   ```
 
 - **`ask` returns error about wren-ui not configured** — the MCP server is
