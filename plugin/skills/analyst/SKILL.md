@@ -1,13 +1,16 @@
 ---
 name: chord-analyst
-description: Answer data questions against the Chord warehouse using retrieval-grounded SQL. Use when the chord-analyst MCP server is connected (mcp__chord_analyst__* tools are available) and the user asks about warehouse data — revenue, orders, customers, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any saved/canonical query. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. Claude retrieves full context (DDL, instructions, memory, examples) before writing SQL.
+description: Answer data questions against the Chord warehouse using retrieval-grounded SQL. Use when the chord MCP server is connected (mcp__chord__* tools are available) and the user asks about warehouse data — revenue, orders, customers, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any saved/canonical query. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. Claude retrieves full context (DDL, instructions, memory, examples) before writing SQL.
 ---
 
 # Chord Analyst — retrieval-grounded SQL workflow
 
-You have access to `mcp__chord_analyst__*` tools exposed by the chord-analyst MCP
-server. Reach for them automatically — without being asked — whenever the user's
+You have access to `mcp__chord__*` tools exposed by the chord MCP server.
+Reach for them automatically — without being asked — whenever the user's
 request involves warehouse data, schema, saved queries, or product documentation.
+
+Use the Analyst-tier tools for this workflow. Do not call `ask` — that is the
+Copilot tier. Claude writes SQL here; Chord provides the context.
 
 ## Tools
 
@@ -28,8 +31,7 @@ request involves warehouse data, schema, saved queries, or product documentation
 
 - **`search_schema`** — semantic search over table descriptions. Useful for
   exploring beyond the top-k tables returned by `get_sql_context`.
-- **`search_sql_pairs`** — additional historical Q&A examples beyond what
-  `get_sql_context` returns.
+- **`search_sql_pairs`** — additional historical Q&A examples.
 - **`search_saved_views`** — canonical, user-blessed queries. Prefer an existing
   view over writing new SQL if one covers the question.
 - **`search_instructions`** — targeted instruction lookup by scope (e.g.
@@ -63,10 +65,10 @@ request involves warehouse data, schema, saved queries, or product documentation
 
 ## Failure modes
 
-- **MCP tools not available** — the `mcp__chord_analyst__*` tools are missing.
-  The chord-analyst MCP server isn't registered. Tell the user to run:
+- **MCP tools not available** — the `mcp__chord__*` tools are missing.
+  The chord MCP server isn't registered. Tell the user to run:
   ```
-  claude mcp add chord-analyst --transport http https://mcp.<instance>.chord.co/mcp/analyst/ --scope user
+  claude mcp add chord --transport http https://mcp.<instance>.chord.co/mcp/ --scope user
   ```
 
 - **Engine unreachable** — `execute_sql` / `preview_table` return a connection

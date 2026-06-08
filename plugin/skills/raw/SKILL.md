@@ -1,12 +1,15 @@
 ---
 name: chord-raw
-description: Answer data questions against the Chord warehouse using only table descriptions and SQL execution. Use when the chord-raw MCP server is connected (mcp__chord_raw__* tools are available) and the user asks about warehouse data — revenue, orders, customers, products, subscriptions, sessions, or any metric that lives in the Chord data model. Claude discovers tables via search_schema and writes SQL itself with no additional context.
+description: Answer data questions against the Chord warehouse using only table descriptions and SQL execution. Use when the chord MCP server is connected (mcp__chord__* tools are available) and the user asks about warehouse data — revenue, orders, customers, products, subscriptions, sessions, or any metric that lives in the Chord data model. Claude discovers tables via search_schema and writes SQL itself with no additional context.
 ---
 
 # Chord Raw — data-question workflow
 
-You have access to `mcp__chord_raw__*` tools exposed by the chord-raw MCP server.
-Use them automatically whenever the user's request involves warehouse data or metrics.
+You have access to `mcp__chord__*` tools exposed by the chord MCP server.
+
+Use only the Raw-tier tools for this workflow: `search_schema` and `execute_sql`.
+Do not call `get_sql_context`, `ask`, or other tools — they are not part of the
+Raw tier.
 
 ## Tools
 
@@ -37,8 +40,8 @@ Use them automatically whenever the user's request involves warehouse data or me
 
 ## Failure modes
 
-- **MCP tools not available** — the `mcp__chord_raw__*` tools are missing.
-  The chord-raw MCP server isn't registered with Claude Code. Tell the user to run:
+- **MCP tools not available** — the `mcp__chord__*` tools are missing.
+  The chord MCP server isn't registered with Claude Code. Tell the user to run:
   ```
-  claude mcp add chord-raw --transport http https://mcp.<instance>.chord.co/mcp/raw/ --scope user
+  claude mcp add chord --transport http https://mcp.<instance>.chord.co/mcp/ --scope user
   ```
