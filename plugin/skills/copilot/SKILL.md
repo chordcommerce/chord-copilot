@@ -1,6 +1,6 @@
 ---
 name: chord-copilot
-description: Answer data questions against the Chord warehouse using the chord MCP retrieval and execution tools. Use when the user asks about warehouse data, schema, metrics, revenue, customers, orders, products, subscriptions, sessions, attribution, Shopify, Klaviyo, Iterable, or any saved/canonical query — i.e. anything that would be answered by SQL against the Chord data model. Triggers include 'how many', 'show me', 'top N', 'last month', 'last quarter', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. For a text-to-SQL question, calls `ask` (Chord's end-to-end text-to-SQL pipeline) then runs the returned SQL with execute_sql, falling back to the retrieval-grounded authoring workflow (search_schema → search_saved_views / search_sql_pairs → search_instructions → draft SQL → execute_sql) when ask fails or the SQL needs inspection. Requires the chord-copilot MCP server to be connected; if the mcp__chord__* tools are not available, fall back to the user's normal workflow and tell them to connect the server.
+description: Answer data questions against the Chord warehouse using the chord MCP retrieval and execution tools. Use when the user asks about warehouse data, schema, metrics, revenue, customers, orders, products, subscriptions, sessions, attribution, Shopify, Klaviyo, or Iterable — anything answered by SQL against the Chord data model. Triggers include 'how many', 'show me', 'top N', 'last month', 'trend', 'breakdown', 'compare', 'revenue', 'orders', 'customers'. For text-to-SQL, call `ask` (Chord's end-to-end pipeline) then run the returned SQL with execute_sql, falling back to the retrieval-grounded workflow (search_schema → search_saved_views / search_sql_pairs → search_instructions → draft SQL → execute_sql) when ask fails or the SQL needs inspection. Requires the chord-copilot MCP server; if the mcp__chord__* tools aren't available, fall back to the user's normal workflow and tell them to connect the server.
 ---
 
 # Chord Copilot — data-question workflow
@@ -82,3 +82,17 @@ Run independent retrieval steps in parallel.
 - If the engine returns an error, surface the error text verbatim before
   attempting a fix — the user often recognizes it.
 
+## Failure modes
+
+- **MCP tools not available**: the `mcp__chord__*` tools are missing from
+  the tool list. The chord-copilot MCP server isn't registered with
+  Claude Code. Tell the user to run:
+  ```
+  claude mcp add chord-copilot --transport http http://localhost:5556/mcp/ --scope user
+  ```
+  (replacing the URL if their wren-ai-service runs elsewhere). Fall back
+  to whatever workflow they normally use until they do.
+- **Engine unreachable**: `execute_sql` / `preview_table` return a
+  connection error (typically localhost:3000 unreachable). The retrieval
+  tools may still work — complete steps 1–4 and stop at "drafted SQL,
+  ready to run once the engine is up."
