@@ -2,7 +2,7 @@
   "mcpServers": {
     "chord-copilot": {
       "type": "streamable-http",
-      "url": "https://mcp.staging.chorddemo.copilot.chord.co/mcp/"
+      "url": "https://mcp.chord.co/mcp"
     }
   }
 }

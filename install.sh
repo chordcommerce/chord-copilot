@@ -32,7 +32,7 @@ set -euo pipefail
 SKILL_NAME="chord-copilot"
 REPO_PATH="chordcommerce/chord-copilot"
 SKILL_REPO_PATH="plugin/skills/copilot/SKILL.md"
-DEFAULT_MCP_URL="https://mcp.staging.chorddemo.copilot.chord.co/mcp/"
+DEFAULT_MCP_URL="https://mcp.chord.co/mcp"
 
 CLIENT="claude-code"
 SCOPE="user"

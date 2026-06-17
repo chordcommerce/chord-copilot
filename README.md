@@ -5,22 +5,20 @@ questions against **your** Chord warehouse — schema lookup, saved views,
 canonical SQL pairs, and `execute_sql`, all behind OAuth.
 
 This repo contains the **install artifacts** for connecting Claude (Code
-or Desktop) to your Chord Copilot instance. The server itself runs on
-Chord-managed infrastructure.
+or Desktop) to Chord Copilot. The server itself runs on Chord-managed
+infrastructure.
 
 ## Before you start
 
-You need your **instance URL**. Every Chord customer has their own
-hosted endpoint of the form:
+Chord Copilot is reachable at a single global endpoint:
 
 ```
-https://mcp.<instance>.copilot.chord.co/mcp/
+https://mcp.chord.co/mcp
 ```
 
-`<instance>` is the slug Chord assigned to your tenant (ask your Chord
-contact if you don't have it). The examples below use
-`<instance>` as a placeholder — substitute your own everywhere it
-appears.
+There's no per-customer URL — the same endpoint serves every tenant, and
+the server routes each request to the right warehouse based on your
+authenticated Chord account. The examples below all use this URL as-is.
 
 On first connection, you'll be redirected to a browser to complete OAuth
 sign-in with your Chord account. The token is cached for subsequent
@@ -30,14 +28,16 @@ sessions.
 
 ## Claude Code
 
-> **Note:** the `/plugin install chord@chord` path in this repo is
-> intended for engineers developing against a **local** MCP server
-> (`http://localhost:5556`). Customers should use one of the two paths
-> below, which let you point at your own hosted instance.
+> **Tip:** the one-step path is `/plugin install chord@chord`. Because
+> Copilot now lives at a single shared endpoint
+> (`https://mcp.chord.co/mcp`), the plugin registers the MCP server and
+> installs the skill together — no per-customer URL to fill in. The two
+> options below set the same thing up manually; use them if you'd rather
+> not use the plugin.
 
 You need to do two things: **register the MCP server** so Claude Code
-can talk to your Copilot instance, and **install the skill** so Claude
-knows the retrieval-grounded workflow for using it.
+can talk to Copilot, and **install the skill** so Claude knows the
+retrieval-grounded workflow for using it.
 
 ### Option A — One-liner (recommended)
 
@@ -47,13 +47,13 @@ Installs the skill from this repo into `~/.claude/skills/chord-copilot/`:
 curl -fsSL https://raw.githubusercontent.com/chordcommerce/chord-copilot/main/install.sh | bash
 ```
 
-Then register the MCP server, pointing at your instance:
+Then register the MCP server:
 
 ```bash
 claude mcp add chord-copilot \
   --transport http \
   --scope user \
-  https://mcp.<instance>.copilot.chord.co/mcp/
+  https://mcp.chord.co/mcp
 ```
 
 Restart Claude Code. On first use, a browser tab opens for OAuth
@@ -108,7 +108,7 @@ to manage.
 1. Open **Settings → Connectors → Add custom connector**.
 2. Fill in:
    - **Name:** `Chord Copilot`
-   - **Remote MCP server URL:** `https://mcp.<instance>.copilot.chord.co/mcp/`
+   - **Remote MCP server URL:** `https://mcp.chord.co/mcp`
 3. Save. Claude Desktop opens a browser tab for OAuth sign-in on first use.
 
 ### Option B — Edit config file (any plan)
@@ -123,7 +123,7 @@ block on next launch — don't.)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chordcommerce/chord-copilot/main/install.sh | \
-  bash -s -- --client claude-desktop --url https://mcp.<instance>.copilot.chord.co/mcp/
+  bash -s -- --client claude-desktop --url https://mcp.chord.co/mcp
 ```
 
 This merges a `chord-copilot` entry into `claude_desktop_config.json`
@@ -143,7 +143,7 @@ add:
       "args": [
         "-y",
         "mcp-remote",
-        "https://mcp.<instance>.copilot.chord.co/mcp/"
+        "https://mcp.chord.co/mcp"
       ]
     }
   }
@@ -185,7 +185,7 @@ does in Claude Code.
 ## Other MCP clients
 
 Any client that supports remote `streamable-http` MCP servers can
-connect directly to `https://mcp.<instance>.copilot.chord.co/mcp/`.
+connect directly to `https://mcp.chord.co/mcp`.
 Clients that only speak stdio (like Claude Desktop's config file) need
 the `mcp-remote` shim shown above.
 
@@ -202,7 +202,7 @@ the `mcp-remote` shim shown above.
 - `--scope user` (default) → `~/.claude/skills/chord-copilot/`.
 - `--scope project` → `<project-dir>/.claude/skills/chord-copilot/`.
 - `--project-dir <path>` — defaults to `pwd`.
-- `--url <url>` — your instance URL (claude-desktop only; defaults to Chord staging).
+- `--url <url>` — MCP server URL (claude-desktop only; defaults to `https://mcp.chord.co/mcp`).
 - `--force` — overwrite an existing install/entry without prompting.
 
 ## Troubleshooting
@@ -211,9 +211,10 @@ the `mcp-remote` shim shown above.
   OAuth token may have expired. In Claude Code, run
   `claude mcp remove chord-copilot && claude mcp add ...` again. In
   Claude Desktop, delete `~/.mcp-auth/` and restart.
-- **Wrong instance URL** — confirm with your Chord contact that
-  `mcp.<instance>.copilot.chord.co` is reachable from a browser; you
-  should land on a Chord-branded sign-in page.
+- **Can't reach the server** — confirm `https://mcp.chord.co/mcp` is
+  reachable from a browser; you should land on a Chord-branded sign-in
+  page. If sign-in succeeds but you see no data, you may not have a
+  warehouse provisioned yet — check with your Chord contact.
 - **Skill doesn't auto-trigger in Claude Code** — confirm `SKILL.md`
   lives at `~/.claude/skills/chord-copilot/SKILL.md` and restart the
   Claude Code session.
