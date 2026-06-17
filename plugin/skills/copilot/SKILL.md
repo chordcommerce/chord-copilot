@@ -58,6 +58,24 @@ either way.
 - **`execute_sql`** — run a read-only query (SELECT/UNION/INTERSECT/EXCEPT
   only; capped at 10000 rows). Pass `validate_only=True` to parse-check
   without executing.
+- **`list_tenants`** — list the tenants (Chord organizations) you have access
+  to. Returns `[{name, slug, current}]` where `current` marks the tenant your
+  requests route to right now. Every other tool automatically targets the
+  current tenant's warehouse — you never pass a tenant per call.
+- **`switch_tenant`** — change which tenant subsequent tool calls route to.
+  Pass `slug` (from `list_tenants`) for an organization you're a member of;
+  every later call (`ask`, `execute_sql`, `search_*`, `preview_table`) then
+  targets that tenant's warehouse for the rest of the session — no reconnect
+  or re-auth needed. Rejected if you're not a member of the requested tenant.
+
+## Working across tenants
+
+The server routes every request to the **current tenant's** warehouse — it
+picks this for you from your authenticated account, so don't try to route by
+hand. If you're unsure which organization you're operating in, call
+`list_tenants` first (it marks the `current` one). When the user asks to work
+against a different organization they belong to, call `switch_tenant` with its
+`slug`; the new routing sticks for the rest of the session.
 
 ## Default workflow
 
